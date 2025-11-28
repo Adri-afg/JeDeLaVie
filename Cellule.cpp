@@ -68,3 +68,7 @@ void Cellule::basculerObstacle() {
     obstacle = !obstacle;
 }
 
+
+
+
+

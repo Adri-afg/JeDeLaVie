@@ -476,3 +476,7 @@ void Grille::placerMotif(const std::string& motif, int x, int y) {
     }
 }
 
+
+
+
+

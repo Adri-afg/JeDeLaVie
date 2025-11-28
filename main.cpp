@@ -84,7 +84,126 @@ struct HelpItem {
     std::string description;
 };
 
-int main() {
+// ============================================================
+// FONCTION D'AIDE POUR LA LIGNE DE COMMANDE
+// ============================================================
+void afficherAideCommande() {
+    std::cout << "=========================================" << std::endl;
+    std::cout << "    JEU DE LA VIE - Conway" << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << std::endl;
+    std::cout << "UTILISATION:" << std::endl;
+    std::cout << "  ./bin/game_of_life                        Mode graphique (par defaut)" << std::endl;
+    std::cout << "  ./bin/game_of_life --console <fichier> <n>  Mode console" << std::endl;
+    std::cout << "  ./bin/game_of_life --test <fichier> <n>     Test unitaire" << std::endl;
+    std::cout << "  ./bin/game_of_life --help                   Afficher cette aide" << std::endl;
+    std::cout << std::endl;
+    std::cout << "MODES:" << std::endl;
+    std::cout << "  --console <fichier> <n>" << std::endl;
+    std::cout << "      Execute n iterations depuis le fichier d'entree." << std::endl;
+    std::cout << "      Sauvegarde chaque generation dans le dossier <fichier>_out/" << std::endl;
+    std::cout << "      Exemple: ./bin/game_of_life --console exemple.txt 100" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  --test <fichier_attendu> <n>" << std::endl;
+    std::cout << "      Execute n iterations puis compare avec le fichier attendu." << std::endl;
+    std::cout << "      Retourne 0 si reussi, 1 si echoue." << std::endl;
+    std::cout << "      Exemple: ./bin/game_of_life --test resultat_attendu.txt 50" << std::endl;
+    std::cout << std::endl;
+    std::cout << "FORMAT FICHIER:" << std::endl;
+    std::cout << "  Ligne 1: largeur hauteur" << std::endl;
+    std::cout << "  Lignes suivantes: matrice de 0 (mort) et 1 (vivant)" << std::endl;
+    std::cout << std::endl;
+    std::cout << "EXEMPLE FICHIER:" << std::endl;
+    std::cout << "  5 5" << std::endl;
+    std::cout << "  0 0 0 0 0" << std::endl;
+    std::cout << "  0 0 1 0 0" << std::endl;
+    std::cout << "  0 0 1 0 0" << std::endl;
+    std::cout << "  0 0 1 0 0" << std::endl;
+    std::cout << "  0 0 0 0 0" << std::endl;
+    std::cout << "=========================================" << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+    // ============================================================
+    // GESTION DES ARGUMENTS DE LIGNE DE COMMANDE
+    // ============================================================
+    
+    // Mode console : --console <fichier_entree> <nb_iterations>
+    if (argc >= 2 && std::string(argv[1]) == "--console") {
+        if (argc < 4) {
+            std::cerr << "Erreur: Mode console requiert 2 arguments" << std::endl;
+            std::cerr << "Usage: ./bin/game_of_life --console <fichier> <iterations>" << std::endl;
+            return 1;
+        }
+        
+        std::string fichierEntree = argv[2];
+        int nbIterations = std::stoi(argv[3]);
+        
+        std::cout << "=========================================" << std::endl;
+        std::cout << "MODE CONSOLE - Jeu de la Vie" << std::endl;
+        std::cout << "=========================================" << std::endl;
+        std::cout << "Fichier d'entree : " << fichierEntree << std::endl;
+        std::cout << "Nombre d'iterations : " << nbIterations << std::endl;
+        std::cout << "=========================================" << std::endl;
+        
+        GameOfLife game(GRID_WIDTH, GRID_HEIGHT, 0.1f);
+        
+        if (game.runConsoleMode(fichierEntree, nbIterations)) {
+            std::cout << "=========================================" << std::endl;
+            std::cout << "Mode console termine avec SUCCES !" << std::endl;
+            std::cout << "=========================================" << std::endl;
+            return 0;
+        } else {
+            std::cerr << "=========================================" << std::endl;
+            std::cerr << "ERREUR lors de l'execution du mode console" << std::endl;
+            std::cerr << "=========================================" << std::endl;
+            return 1;
+        }
+    }
+    
+    // Mode test unitaire : --test <fichier_grille_attendue> <nb_iterations>
+    if (argc >= 2 && std::string(argv[1]) == "--test") {
+        if (argc < 4) {
+            std::cerr << "Erreur: Mode test requiert 2 arguments" << std::endl;
+            std::cerr << "Usage: ./bin/game_of_life --test <fichier_attendu> <iterations>" << std::endl;
+            return 1;
+        }
+        
+        std::string fichierAttendu = argv[2];
+        int nbIterations = std::stoi(argv[3]);
+        
+        std::cout << "=========================================" << std::endl;
+        std::cout << "MODE TEST UNITAIRE - Jeu de la Vie" << std::endl;
+        std::cout << "=========================================" << std::endl;
+        std::cout << "Fichier attendu : " << fichierAttendu << std::endl;
+        std::cout << "Nombre d'iterations : " << nbIterations << std::endl;
+        std::cout << "=========================================" << std::endl;
+        
+        GameOfLife game(GRID_WIDTH, GRID_HEIGHT, 0.1f);
+        
+        if (game.runUnitTest(fichierAttendu, nbIterations)) {
+            std::cout << "=========================================" << std::endl;
+            std::cout << "Test unitaire REUSSI !" << std::endl;
+            std::cout << "=========================================" << std::endl;
+            return 0;
+        } else {
+            std::cout << "=========================================" << std::endl;
+            std::cout << "Test unitaire ECHOUE" << std::endl;
+            std::cout << "=========================================" << std::endl;
+            return 1;
+        }
+    }
+    
+    // Afficher l'aide : --help
+    if (argc >= 2 && (std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h")) {
+        afficherAideCommande();
+        return 0;
+    }
+    
+    // ============================================================
+    // MODE GRAPHIQUE (par défaut)
+    // ============================================================
+    
     // Création de la fenêtre SFML
     sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), 
                            "Jeu de la Vie - Conway");
@@ -1030,31 +1149,31 @@ int main() {
             window.draw(toricIndicatorV);
         }
 
-        // Indicateur de position dans l'historique / indicateurPositionHistorique
-        if (game.getHistoryPosition() > 0 && fontLoaded) {
-            sf::RectangleShape historyIndicator(sf::Vector2f(200, 25));
-            historyIndicator.setPosition(10, 10);
-            historyIndicator.setFillColor(sf::Color(100, 50, 50, 200));
-            historyIndicator.setOutlineColor(sf::Color::Yellow);
-            historyIndicator.setOutlineThickness(2);
-            window.draw(historyIndicator);
-            
-            std::ostringstream histText;
-            histText << "Historique: -" << game.getHistoryPosition() << " generation(s)";
-            sf::Text historyText(histText.str(), font, 12);
-            historyText.setPosition(15, 13);
-            historyText.setFillColor(sf::Color::Yellow);
-            historyText.setStyle(sf::Text::Bold);
-            window.draw(historyText);
-        }
-        
         // ============================================================
-        // INDICATEUR DE MODE DE DESSIN / DRAWING MODE INDICATOR
-        // indicateurModeDessin - Affiche le mode actuel en haut à gauche
+        // INDICATEURS EN BAS À DROITE / BOTTOM-RIGHT INDICATORS
         // ============================================================
         if (fontLoaded) {
-            float indicateurY = 45;  // hauteurIndicateur - Sous les onglets
-            float indicateurX = 10;  // positionXIndicateur
+            // Position en bas à droite
+            float indicateurX = WINDOW_WIDTH - 420;  // Position X (depuis la droite)
+            float indicateurY = WINDOW_HEIGHT - 90;  // Position Y (depuis le bas)
+            
+            // Indicateur de position dans l'historique / indicateurPositionHistorique
+            if (game.getHistoryPosition() > 0) {
+                sf::RectangleShape historyIndicator(sf::Vector2f(200, 25));
+                historyIndicator.setPosition(indicateurX, indicateurY - 35);
+                historyIndicator.setFillColor(sf::Color(100, 50, 50, 200));
+                historyIndicator.setOutlineColor(sf::Color::Yellow);
+                historyIndicator.setOutlineThickness(2);
+                window.draw(historyIndicator);
+                
+                std::ostringstream histText;
+                histText << "Historique: -" << game.getHistoryPosition() << " generation(s)";
+                sf::Text historyText(histText.str(), font, 12);
+                historyText.setPosition(indicateurX + 5, indicateurY - 32);
+                historyText.setFillColor(sf::Color::Yellow);
+                historyText.setStyle(sf::Text::Bold);
+                window.draw(historyText);
+            }
             
             // INDICATEUR PRINCIPAL : CELLULES ou OBSTACLES
             // indicateurPrincipal : cellulesOuObstacles
