@@ -2,6 +2,71 @@
 
 Implémentation du jeu de la vie de Conway en C++ avec SFML pour l'interface graphique.
 
+## 🚀 Installation rapide
+
+### Cloner le projet depuis GitHub
+
+```bash
+git clone https://github.com/Adri-afg/JeDeLaVie.git
+cd JeDeLaVie
+```
+
+### Installer les dépendances (Ubuntu/Debian)
+
+```bash
+sudo apt-get update
+sudo apt-get install libsfml-dev g++ make
+```
+
+### Compiler
+
+```bash
+make
+```
+
+### Lancer
+
+```bash
+# Mode graphique (interface SFML)
+./bin/game_of_life
+
+# Mode console (génère n itérations dans des fichiers)
+./bin/game_of_life --console exemple.txt 100
+
+# Mode test unitaire
+./bin/game_of_life --test grille_attendue.txt 50
+
+# Afficher l'aide
+./bin/game_of_life --help
+```
+
+---
+
+## 📋 Modes d'exécution en ligne de commande
+
+| Mode | Commande | Description |
+|------|----------|-------------|
+| **Graphique** | `./bin/game_of_life` | Lance l'interface SFML interactive |
+| **Console** | `./bin/game_of_life --console <fichier> <iterations>` | Génère les itérations dans `<fichier>_out/` |
+| **Test** | `./bin/game_of_life --test <fichier_attendu> <iterations>` | Compare le résultat avec la grille attendue |
+| **Aide** | `./bin/game_of_life --help` | Affiche l'aide des commandes |
+
+### Exemples d'utilisation
+
+```bash
+# Générer 50 itérations à partir d'exemple.txt
+./bin/game_of_life --console exemple.txt 50
+# Résultat → dossier exemple_out/ avec generation_000000.txt à generation_000050.txt
+
+# Générer 200 itérations avec le canon à planeurs
+./bin/game_of_life --console exemple_2.txt 200
+
+# Tester si après 10 itérations la grille correspond à un fichier attendu
+./bin/game_of_life --test resultat_attendu.txt 10
+```
+
+---
+
 ## Description
 
 Le jeu de la vie est un automate cellulaire où des cellules évoluent selon des règles simples :
@@ -26,36 +91,70 @@ La barre de progression change de couleur :
 
 ## Prérequis
 
-- Compilateur C++11 (g++ recommandé)
-- Bibliothèque SFML (libsfml-dev sur Ubuntu/Debian)
+- Compilateur C++11 ou supérieur (g++ recommandé)
+- Bibliothèque SFML 2.5+ (libsfml-dev sur Ubuntu/Debian)
+- Make
 
-### Installation de SFML sur Ubuntu/Debian
+### Installation des dépendances
 
+**Ubuntu/Debian :**
 ```bash
 sudo apt-get update
-sudo apt-get install libsfml-dev
+sudo apt-get install libsfml-dev g++ make
+```
+
+**Arch Linux :**
+```bash
+sudo pacman -S sfml gcc make
+```
+
+**Fedora :**
+```bash
+sudo dnf install SFML-devel gcc-c++ make
 ```
 
 ## Compilation
 
-Utilisez le Makefile fourni :
-
 ```bash
-make
+make           # Compile le projet
+make clean     # Supprime les fichiers compilés
+make rebuild   # Recompile tout depuis zéro
 ```
 
-Cela créera l'exécutable dans le dossier `bin/game_of_life`.
+L'exécutable est créé dans `bin/game_of_life`.
 
 ## Exécution
 
+### Mode graphique (interface SFML)
 ```bash
+./bin/game_of_life
+# ou
 make run
 ```
 
-ou directement :
-
+### Mode console (sans interface graphique)
 ```bash
-./bin/game_of_life
+./bin/game_of_life --console <fichier_entree> <nombre_iterations>
+```
+Exemple :
+```bash
+./bin/game_of_life --console exemple.txt 100
+```
+➡️ Crée le dossier `exemple_out/` avec les fichiers `generation_000000.txt` à `generation_000100.txt`
+
+### Mode test unitaire
+```bash
+./bin/game_of_life --test <fichier_attendu> <nombre_iterations>
+```
+Exemple :
+```bash
+./bin/game_of_life --test resultat_attendu.txt 10
+```
+➡️ Compare la grille après 10 itérations avec le fichier attendu
+
+### Afficher l'aide
+```bash
+./bin/game_of_life --help
 ```
 
 ## Contrôles
