@@ -3,14 +3,17 @@
 
 #include <vector>
 #include <string>
+#include <memory>
 #include "Cell.hpp"
+#include "Rule.hpp"
 
 /**
  * @class Grid
  * @brief Gère la grille de cellules du jeu de la vie
  * 
- * La grille est une matrice rectangulaire de cellules
- * Supporte le mode torique et la parallélisation
+ * La grille est une matrice rectangulaire de cellules.
+ * Elle supporte le mode torique et la parallélisation.
+ * Les règles d'évolution sont gérées via le pattern Strategy.
  */
 class Grid {
 private:
@@ -19,6 +22,7 @@ private:
     int height;  // Hauteur de la grille
     bool toricMode;  // Mode torique (grille sans bords)
     bool parallelMode;  // Mode parallèle pour le calcul
+    std::unique_ptr<Rule> rule;  // Règle d'évolution (Strategy pattern)
 
     /**
      * @brief Compte le nombre de voisines vivantes d'une cellule
@@ -43,6 +47,24 @@ public:
      * @param height Hauteur de la grille
      */
     Grid(int width, int height);
+
+    /**
+     * @brief Constructeur par copie
+     * @param other Grille à copier
+     */
+    Grid(const Grid& other);
+
+    /**
+     * @brief Opérateur d'affectation
+     * @param other Grille à copier
+     * @return Référence vers cette grille
+     */
+    Grid& operator=(const Grid& other);
+
+    /**
+     * @brief Destructeur
+     */
+    ~Grid() = default;
 
     /**
      * @brief Obtient la largeur de la grille
@@ -97,10 +119,6 @@ public:
      * @brief Charge la grille depuis un fichier
      * @param filename Chemin vers le fichier
      * @return true si le chargement a réussi, false sinon
-     * 
-     * Format du fichier :
-     * - Première ligne : largeur hauteur
-     * - Lignes suivantes : matrice de 0 (mort) et 1 (vivant)
      */
     bool loadFromFile(const std::string& filename);
 
@@ -115,10 +133,6 @@ public:
      * @brief Sauvegarde la grille dans un fichier
      * @param filename Chemin vers le fichier
      * @return true si la sauvegarde a réussi, false sinon
-     * 
-     * Format du fichier :
-     * - Première ligne : largeur hauteur
-     * - Lignes suivantes : matrice de 0 (mort) et 1 (vivant)
      */
     bool saveToFile(const std::string& filename) const;
 
@@ -176,7 +190,30 @@ public:
      * @brief Efface tous les obstacles de la grille
      */
     void clearObstacles();
+
+    /**
+     * @brief Définit la règle d'évolution (Strategy pattern)
+     * @param newRule Nouvelle règle à utiliser
+     */
+    void setRule(std::unique_ptr<Rule> newRule);
+
+    /**
+     * @brief Obtient la règle d'évolution actuelle
+     * @return Référence constante vers la règle
+     */
+    const Rule& getRule() const;
+
+    /**
+     * @brief Compte le nombre de cellules vivantes dans la grille
+     * @return Nombre de cellules vivantes
+     */
+    int countLivingCells() const;
+
+    /**
+     * @brief Obtient la liste des motifs disponibles
+     * @return Vecteur de noms de motifs
+     */
+    static std::vector<std::string> getAvailablePatterns();
 };
 
 #endif // GRID_HPP
-

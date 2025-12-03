@@ -1,21 +1,15 @@
 #include "GameOfLife.hpp"
+#include "FileHandler.hpp"
 #include <sstream>
 #include <iomanip>
 #include <iostream>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#ifdef _WIN32
-#include <direct.h>
-#define mkdir(path, mode) _mkdir(path)
-#endif
 
 GameOfLife::GameOfLife(int width, int height, float updateInterval)
     : grid(width, height), isRunning(true), isPaused(false),
       updateInterval(updateInterval), timeSinceLastUpdate(0.0f),
-      autoSaveGenerations(false), generationCount(0), saveDirectory("generations"),
+      generationCount(0), renderer(std::make_shared<NullRenderer>()),
       historyIndex(-1), previousGrid(width, height), timeSinceLastChange(0.0f),
-      hasStoppedEvolving(false), detectedCycleLength(0) {
+      hasStoppedEvolving(false), detectedCycleLength(0), stopReason("") {
     // Initialiser l'historique vide
     history.clear();
     // Initialiser la grille précédente avec l'état actuel
@@ -55,14 +49,22 @@ void GameOfLife::update(float deltaTime) {
             timeSinceLastUpdate = 0.0f;
         }
         
-        // Incrémenter le temps depuis le dernier changement
-        timeSinceLastChange += deltaTime;
+        // Incrémenter le temps depuis le dernier changement si cycle détecté
+        if (detectedCycleLength > 0) {
+            timeSinceLastChange += deltaTime;
+        }
         
-        // Vérifier si l'automate a arrêté d'évoluer
-        if (timeSinceLastChange >= STAGNATION_TIMEOUT) {
+        // Vérifier si l'automate a arrêté d'évoluer (cycle ou stable pendant 10s)
+        if (detectedCycleLength > 0 && timeSinceLastChange >= STAGNATION_TIMEOUT) {
             hasStoppedEvolving = true;
             isPaused = true;  // Mettre en pause automatiquement
-            isRunning = false;  // Arrêter la simulation
+            
+            // Définir la raison de l'arrêt
+            if (detectedCycleLength == 1) {
+                stopReason = "STABLE - L'automate ne change plus";
+            } else {
+                stopReason = "CYCLE détecté (période " + std::to_string(detectedCycleLength) + ")";
+            }
         }
     }
 }
@@ -70,8 +72,6 @@ void GameOfLife::update(float deltaTime) {
 void GameOfLife::step() {
     // Si on est dans l'historique, on doit revenir à la génération actuelle d'abord
     if (historyIndex >= 0) {
-        // On est dans l'historique, on ne peut pas avancer
-        // Il faut d'abord revenir à la génération actuelle
         return;
     }
     
@@ -88,6 +88,7 @@ void GameOfLife::step() {
     // Avancer d'une génération
     grid.computeNextGeneration();
     grid.update();
+    generationCount++;
     
     // Vérifier si la grille a changé ou si un cycle est détecté
     bool cycleDetected = false;
@@ -101,7 +102,7 @@ void GameOfLife::step() {
         // Vérifier si la grille correspond à une des générations dans l'historique (oscillation)
         for (size_t i = 0; i < history.size(); ++i) {
             if (grid.isEqual(history[i])) {
-                detectedCycleLength = static_cast<int>(i + 2);  // +2 car l'historique ne contient pas la génération actuelle
+                detectedCycleLength = static_cast<int>(i + 2);
                 cycleDetected = true;
                 break;
             }
@@ -110,7 +111,6 @@ void GameOfLife::step() {
     
     if (cycleDetected) {
         // Un cycle est détecté, le timer continue
-        // (timeSinceLastChange sera incrémenté dans update())
     } else {
         // La grille a changé de manière unique, réinitialiser le timer
         timeSinceLastChange = 0.0f;
@@ -119,24 +119,6 @@ void GameOfLife::step() {
     
     // Toujours mettre à jour la grille précédente
     previousGrid.copyFrom(grid);
-    
-    // Enregistrer la génération si l'enregistrement automatique est activé
-    if (autoSaveGenerations) {
-        // Créer le répertoire s'il n'existe pas
-        mkdir(saveDirectory.c_str(), 0755);
-        
-        // Générer le nom du fichier
-        std::ostringstream filename;
-        filename << saveDirectory << "/generation_" 
-                 << std::setfill('0') << std::setw(6) << generationCount << ".txt";
-        
-        // Sauvegarder la génération
-        if (grid.saveToFile(filename.str())) {
-            // Succès silencieux pour ne pas ralentir la simulation
-        }
-        
-        generationCount++;
-    }
 }
 
 void GameOfLife::randomize() {
@@ -166,34 +148,12 @@ bool GameOfLife::saveToFile(const std::string& filename) const {
     return grid.saveToFile(filename);
 }
 
-void GameOfLife::setAutoSaveGenerations(bool enabled) {
-    autoSaveGenerations = enabled;
-    if (enabled && generationCount == 0) {
-        // Sauvegarder la génération initiale
-        mkdir(saveDirectory.c_str(), 0755);
-        std::ostringstream filename;
-        filename << saveDirectory << "/generation_" 
-                 << std::setfill('0') << std::setw(6) << generationCount << ".txt";
-        grid.saveToFile(filename.str());
-        generationCount++;
-    }
-}
-
-bool GameOfLife::getAutoSaveGenerations() const {
-    return autoSaveGenerations;
-}
-
-void GameOfLife::setSaveDirectory(const std::string& directory) {
-    saveDirectory = directory;
-}
-
 int GameOfLife::getGenerationCount() const {
     return generationCount;
 }
 
 void GameOfLife::resetGenerationCount() {
     generationCount = 0;
-    // Réinitialiser l'historique
     history.clear();
     historyIndex = -1;
     resetStagnationTimer();
@@ -201,20 +161,15 @@ void GameOfLife::resetGenerationCount() {
 
 bool GameOfLife::goForward() {
     if (historyIndex == -1) {
-        // On est déjà à la génération actuelle, on ne peut pas avancer
         return false;
     }
     
-    // Avancer dans l'historique (diminuer l'index)
     historyIndex--;
     
     if (historyIndex == -1) {
-        // On est revenu à la génération actuelle
-        // La grille actuelle est déjà la bonne (elle n'a pas changé)
         return true;
     }
     
-    // Charger la grille depuis l'historique
     if (historyIndex >= 0 && historyIndex < static_cast<int>(history.size())) {
         grid.copyFrom(history[historyIndex]);
         return true;
@@ -224,12 +179,10 @@ bool GameOfLife::goForward() {
 }
 
 bool GameOfLife::goBackward() {
-    // Si on est déjà à la limite (5 générations en arrière)
     if (historyIndex >= MAX_HISTORY - 1) {
         return false;
     }
     
-    // Si on est à la génération actuelle, sauvegarder d'abord dans l'historique
     if (historyIndex == -1) {
         Grid savedGrid(grid.getWidth(), grid.getHeight());
         savedGrid.copyFrom(grid);
@@ -239,11 +192,9 @@ bool GameOfLife::goBackward() {
         }
         historyIndex = 0;
     } else {
-        // On est déjà dans l'historique, aller plus loin en arrière
         historyIndex++;
     }
     
-    // Charger la grille depuis l'historique
     if (historyIndex >= 0 && historyIndex < static_cast<int>(history.size())) {
         grid.copyFrom(history[historyIndex]);
         return true;
@@ -253,14 +204,11 @@ bool GameOfLife::goBackward() {
 }
 
 bool GameOfLife::canGoForward() const {
-    // On peut avancer si on n'est pas à la génération actuelle
     return historyIndex > -1;
 }
 
 bool GameOfLife::canGoBackward() const {
-    // On peut reculer si on n'est pas déjà à la limite (5 générations)
     if (historyIndex == -1) {
-        // On est à la génération actuelle, on peut reculer si l'historique n'est pas plein
         return history.size() < MAX_HISTORY || !history.empty();
     }
     return historyIndex < MAX_HISTORY - 1 && historyIndex < static_cast<int>(history.size()) - 1;
@@ -268,9 +216,9 @@ bool GameOfLife::canGoBackward() const {
 
 int GameOfLife::getHistoryPosition() const {
     if (historyIndex == -1) {
-        return 0;  // Génération actuelle
+        return 0;
     }
-    return historyIndex + 1;  // 1 à 5 pour les générations précédentes
+    return historyIndex + 1;
 }
 
 bool GameOfLife::getHasStoppedEvolving() const {
@@ -281,6 +229,7 @@ void GameOfLife::resetStagnationTimer() {
     timeSinceLastChange = 0.0f;
     hasStoppedEvolving = false;
     detectedCycleLength = 0;
+    stopReason = "";
     previousGrid.copyFrom(grid);
 }
 
@@ -290,6 +239,10 @@ float GameOfLife::getTimeSinceLastChange() const {
 
 int GameOfLife::getDetectedCycleLength() const {
     return detectedCycleLength;
+}
+
+std::string GameOfLife::getStopReason() const {
+    return stopReason;
 }
 
 void GameOfLife::setUpdateInterval(float interval) {
@@ -302,6 +255,41 @@ float GameOfLife::getUpdateInterval() const {
     return updateInterval;
 }
 
+// ============================================================
+// Méthodes pour le pattern MVC (Renderer)
+// ============================================================
+
+void GameOfLife::setRenderer(std::shared_ptr<IRenderer> newRenderer) {
+    renderer = newRenderer;
+}
+
+std::shared_ptr<IRenderer> GameOfLife::getRenderer() const {
+    return renderer;
+}
+
+void GameOfLife::render() {
+    if (renderer) {
+        renderer->render(grid);
+        renderer->showStats(generationCount, grid.countLivingCells(), isPaused);
+    }
+}
+
+// ============================================================
+// Méthodes pour les règles (Strategy pattern)
+// ============================================================
+
+void GameOfLife::setRule(std::unique_ptr<Rule> newRule) {
+    grid.setRule(std::move(newRule));
+}
+
+const Rule& GameOfLife::getRule() const {
+    return grid.getRule();
+}
+
+// ============================================================
+// Modes d'exécution
+// ============================================================
+
 bool GameOfLife::runConsoleMode(const std::string& inputFilename, int numIterations) {
     // Charger le fichier d'entrée
     if (!grid.loadFromFile(inputFilename)) {
@@ -309,35 +297,22 @@ bool GameOfLife::runConsoleMode(const std::string& inputFilename, int numIterati
         return false;
     }
     
-    // Extraire le nom de base du fichier (sans extension et sans chemin)
-    std::string baseName = inputFilename;
-    
-    // Supprimer le chemin
-    size_t lastSlash = baseName.find_last_of("/\\");
-    if (lastSlash != std::string::npos) {
-        baseName = baseName.substr(lastSlash + 1);
-    }
-    
-    // Supprimer l'extension
-    size_t lastDot = baseName.find_last_of('.');
-    if (lastDot != std::string::npos) {
-        baseName = baseName.substr(0, lastDot);
-    }
+    // Extraire le nom de base du fichier
+    std::string baseName = DirectoryManager::getBaseName(inputFilename);
     
     // Créer le dossier de sortie
     std::string outputDir = baseName + "_out";
-    mkdir(outputDir.c_str(), 0755);
+    DirectoryManager::createDirectory(outputDir);
     
-    std::cout << "Mode console : generation de " << numIterations << " iterations..." << std::endl;
+    std::cout << "Mode console : génération de " << numIterations << " itérations..." << std::endl;
     std::cout << "Dossier de sortie : " << outputDir << std::endl;
     
+    // Créer un FileRenderer pour sauvegarder les générations
+    auto fileRenderer = std::make_shared<FileRenderer>(outputDir);
+    fileRenderer->initialize();
+    
     // Sauvegarder la génération initiale (génération 0)
-    std::ostringstream filename;
-    filename << outputDir << "/generation_" << std::setfill('0') << std::setw(6) << 0 << ".txt";
-    if (!grid.saveToFile(filename.str())) {
-        std::cerr << "Erreur : Impossible de sauvegarder " << filename.str() << std::endl;
-        return false;
-    }
+    fileRenderer->render(grid);
     
     // Générer les n itérations
     for (int i = 1; i <= numIterations; ++i) {
@@ -345,20 +320,16 @@ bool GameOfLife::runConsoleMode(const std::string& inputFilename, int numIterati
         grid.update();
         
         // Sauvegarder chaque génération
-        std::ostringstream genFilename;
-        genFilename << outputDir << "/generation_" << std::setfill('0') << std::setw(6) << i << ".txt";
-        if (!grid.saveToFile(genFilename.str())) {
-            std::cerr << "Erreur : Impossible de sauvegarder " << genFilename.str() << std::endl;
-            return false;
-        }
+        fileRenderer->render(grid);
         
         // Afficher la progression
         if (i % 10 == 0 || i == numIterations) {
-            std::cout << "  Generation " << i << "/" << numIterations << " sauvegardee." << std::endl;
+            std::cout << "  Génération " << i << "/" << numIterations << " sauvegardée." << std::endl;
         }
     }
     
-    std::cout << "Mode console termine avec succes ! " << (numIterations + 1) << " fichiers generes." << std::endl;
+    fileRenderer->shutdown();
+    std::cout << "Mode console terminé avec succès ! " << (numIterations + 1) << " fichiers générés." << std::endl;
     return true;
 }
 
@@ -370,7 +341,7 @@ bool GameOfLife::runUnitTest(const std::string& expectedGridFilename, int numIte
     }
     
     // Charger la grille attendue
-    Grid expectedGrid(1, 1);  // Taille temporaire, sera redimensionnée
+    Grid expectedGrid(1, 1);
     if (!expectedGrid.loadFromFile(expectedGridFilename)) {
         std::cerr << "Test unitaire : Impossible de charger la grille attendue " << expectedGridFilename << std::endl;
         return false;
@@ -380,9 +351,9 @@ bool GameOfLife::runUnitTest(const std::string& expectedGridFilename, int numIte
     bool result = grid.isEqual(expectedGrid);
     
     if (result) {
-        std::cout << "Test unitaire REUSSI : La grille correspond apres " << numIterations << " iterations." << std::endl;
+        std::cout << "Test unitaire RÉUSSI : La grille correspond après " << numIterations << " itérations." << std::endl;
     } else {
-        std::cout << "Test unitaire ECHOUE : La grille ne correspond pas apres " << numIterations << " iterations." << std::endl;
+        std::cout << "Test unitaire ÉCHOUÉ : La grille ne correspond pas après " << numIterations << " itérations." << std::endl;
         std::cout << "  Grille actuelle : " << grid.getWidth() << "x" << grid.getHeight() << std::endl;
         std::cout << "  Grille attendue : " << expectedGrid.getWidth() << "x" << expectedGrid.getHeight() << std::endl;
     }
@@ -390,3 +361,16 @@ bool GameOfLife::runUnitTest(const std::string& expectedGridFilename, int numIte
     return result;
 }
 
+bool GameOfLife::runUnitTestWithInput(
+    const std::string& inputFilename,
+    const std::string& expectedFilename,
+    int numIterations
+) {
+    // Charger la grille initiale
+    if (!grid.loadFromFile(inputFilename)) {
+        std::cerr << "Test unitaire : Impossible de charger la grille initiale " << inputFilename << std::endl;
+        return false;
+    }
+    
+    return runUnitTest(expectedFilename, numIterations);
+}

@@ -1,4 +1,5 @@
 #include "Grid.hpp"
+#include "FileHandler.hpp"
 #include <cstdlib>
 #include <ctime>
 #include <random>
@@ -9,8 +10,39 @@
 #include <vector>
 #include <algorithm>
 
-Grid::Grid(int width, int height) : width(width), height(height), toricMode(false), parallelMode(false) {
+Grid::Grid(int width, int height) 
+    : width(width), height(height), toricMode(false), parallelMode(false),
+      rule(std::make_unique<ClassicRule>()) {
     cells.resize(height, std::vector<Cell>(width));
+}
+
+Grid::Grid(const Grid& other) 
+    : width(other.width), height(other.height), 
+      toricMode(other.toricMode), parallelMode(other.parallelMode),
+      rule(other.rule->clone()) {
+    cells.resize(height, std::vector<Cell>(width));
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            cells[y][x] = other.cells[y][x];
+        }
+    }
+}
+
+Grid& Grid::operator=(const Grid& other) {
+    if (this != &other) {
+        width = other.width;
+        height = other.height;
+        toricMode = other.toricMode;
+        parallelMode = other.parallelMode;
+        rule = other.rule->clone();
+        cells.resize(height, std::vector<Cell>(width));
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                cells[y][x] = other.cells[y][x];
+            }
+        }
+    }
+    return *this;
 }
 
 int Grid::wrapCoordinate(int coord, int max) const {
@@ -36,11 +68,15 @@ const Cell& Grid::getCell(int x, int y) const {
 }
 
 void Grid::randomize(double probability) {
-    std::srand(std::time(nullptr));
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);
+    
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            double randomValue = static_cast<double>(std::rand()) / RAND_MAX;
-            cells[y][x].setAlive(randomValue < probability);
+            if (!cells[y][x].isObstacle()) {
+                cells[y][x].setAlive(dis(gen) < probability);
+            }
         }
     }
 }
@@ -48,7 +84,9 @@ void Grid::randomize(double probability) {
 void Grid::clear() {
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            cells[y][x].setAlive(false);
+            if (!cells[y][x].isObstacle()) {
+                cells[y][x].setAlive(false);
+            }
         }
     }
 }
@@ -93,29 +131,14 @@ void Grid::computeNextGeneration() {
         return;
     }
     
-    // Calcule l'état suivant pour chaque cellule
+    // Calcule l'état suivant pour chaque cellule via le pattern Strategy
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            // Les obstacles gardent leur état
-            if (cells[y][x].isObstacle()) {
-                cells[y][x].setNextState(cells[y][x].isAlive());
-                continue;
-            }
-            
             int livingNeighbors = countLivingNeighbors(x, y);
-            bool currentState = cells[y][x].isAlive();
-            bool nextState = false;
             
-            // Règles du jeu de la vie :
-            // 1. Une cellule morte avec exactement 3 voisines vivantes devient vivante
-            // 2. Une cellule vivante avec 2 ou 3 voisines vivantes reste vivante
-            if (!currentState && livingNeighbors == 3) {
-                nextState = true;
-            } else if (currentState && (livingNeighbors == 2 || livingNeighbors == 3)) {
-                nextState = true;
-            }
-            
-            cells[y][x].setNextState(nextState);
+            // Utiliser la règle pour calculer le prochain état
+            auto nextState = rule->computeNextState(cells[y][x].getState(), livingNeighbors);
+            cells[y][x].setNextState(std::move(nextState));
         }
     }
 }
@@ -137,69 +160,13 @@ void Grid::resize(int newWidth, int newHeight) {
 }
 
 bool Grid::loadFromFile(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Erreur : Impossible d'ouvrir le fichier " << filename << std::endl;
-        return false;
-    }
-
-    // Lire les dimensions
-    int fileWidth, fileHeight;
-    if (!(file >> fileWidth >> fileHeight)) {
-        std::cerr << "Erreur : Format de fichier invalide (dimensions)" << std::endl;
-        file.close();
-        return false;
-    }
-
-    if (fileWidth <= 0 || fileHeight <= 0) {
-        std::cerr << "Erreur : Dimensions invalides" << std::endl;
-        file.close();
-        return false;
-    }
-
-    // Redimensionner la grille
-    resize(fileWidth, fileHeight);
-
-    // Lire la matrice
-    for (int y = 0; y < fileHeight; ++y) {
-        for (int x = 0; x < fileWidth; ++x) {
-            int value;
-            if (!(file >> value)) {
-                std::cerr << "Erreur : Données insuffisantes dans le fichier" << std::endl;
-                file.close();
-                return false;
-            }
-            cells[y][x].setAlive(value == 1);
-        }
-    }
-
-    file.close();
-    return true;
+    auto handler = FileHandlerFactory::createForFile(filename);
+    return handler->load(filename, *this);
 }
 
 bool Grid::saveToFile(const std::string& filename) const {
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Erreur : Impossible de créer le fichier " << filename << std::endl;
-        return false;
-    }
-
-    // Écrire les dimensions
-    file << width << " " << height << std::endl;
-
-    // Écrire la matrice
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            file << (cells[y][x].isAlive() ? 1 : 0);
-            if (x < width - 1) {
-                file << " ";
-            }
-        }
-        file << std::endl;
-    }
-
-    file.close();
-    return true;
+    auto handler = FileHandlerFactory::createForFile(filename);
+    return handler->save(filename, *this);
 }
 
 void Grid::copyFrom(const Grid& other) {
@@ -211,7 +178,7 @@ void Grid::copyFrom(const Grid& other) {
     // Copier l'état de chaque cellule
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            cells[y][x].setAlive(other.cells[y][x].isAlive());
+            cells[y][x] = other.cells[y][x];
         }
     }
 }
@@ -262,23 +229,9 @@ void Grid::computeNextGenerationParallel() {
     auto computeRows = [this](int startRow, int endRow) {
         for (int y = startRow; y < endRow; ++y) {
             for (int x = 0; x < width; ++x) {
-                // Les obstacles gardent leur état
-                if (cells[y][x].isObstacle()) {
-                    cells[y][x].setNextState(cells[y][x].isAlive());
-                    continue;
-                }
-                
                 int livingNeighbors = countLivingNeighbors(x, y);
-                bool currentState = cells[y][x].isAlive();
-                bool nextState = false;
-                
-                if (!currentState && livingNeighbors == 3) {
-                    nextState = true;
-                } else if (currentState && (livingNeighbors == 2 || livingNeighbors == 3)) {
-                    nextState = true;
-                }
-                
-                cells[y][x].setNextState(nextState);
+                auto nextState = rule->computeNextState(cells[y][x].getState(), livingNeighbors);
+                cells[y][x].setNextState(std::move(nextState));
             }
         }
     };
@@ -404,3 +357,42 @@ void Grid::clearObstacles() {
     }
 }
 
+void Grid::setRule(std::unique_ptr<Rule> newRule) {
+    rule = std::move(newRule);
+}
+
+const Rule& Grid::getRule() const {
+    return *rule;
+}
+
+int Grid::countLivingCells() const {
+    int count = 0;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (cells[y][x].isAlive()) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+std::vector<std::string> Grid::getAvailablePatterns() {
+    return {
+        "glider",
+        "blinker",
+        "beacon",
+        "toad",
+        "lwss",
+        "pulsar",
+        "pentadecathlon",
+        "glider_gun",
+        "block",
+        "beehive",
+        "loaf",
+        "boat",
+        "r_pentomino",
+        "diehard",
+        "acorn"
+    };
+}

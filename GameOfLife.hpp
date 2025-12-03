@@ -3,24 +3,29 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include "Grid.hpp"
+#include "Renderer.hpp"
+#include "Rule.hpp"
 
 /**
  * @class GameOfLife
- * @brief Gère la logique principale du jeu de la vie
+ * @brief Gère la logique principale du jeu de la vie (contrôleur)
  * 
- * Contrôle l'évolution de la grille et le cycle de vie du jeu
+ * Cette classe suit le pattern MVC en tant que contrôleur.
+ * Elle coordonne le modèle (Grid) et la vue (IRenderer).
  */
 class GameOfLife {
 private:
-    Grid grid;           // Grille de cellules
+    Grid grid;           // Modèle : Grille de cellules
     bool isRunning;      // Indique si le jeu est en cours d'exécution
     bool isPaused;       // Indique si le jeu est en pause
     float updateInterval; // Intervalle de temps entre les générations (en secondes)
     float timeSinceLastUpdate; // Temps écoulé depuis la dernière mise à jour
-    bool autoSaveGenerations; // Active l'enregistrement automatique des générations
     int generationCount;  // Compteur de générations
-    std::string saveDirectory; // Répertoire pour sauvegarder les générations
+    
+    // Renderer (Vue) - pattern MVC
+    std::shared_ptr<IRenderer> renderer;
     
     // Historique pour navigation
     std::vector<Grid> history;  // Historique des 5 dernières générations
@@ -30,9 +35,10 @@ private:
     // Détection d'arrêt automatique et cycles
     Grid previousGrid;           // Grille précédente pour détecter les changements
     float timeSinceLastChange;   // Temps écoulé depuis le dernier changement
-    static constexpr float STAGNATION_TIMEOUT = 30.0f;  // 30 secondes sans changement
+    static constexpr float STAGNATION_TIMEOUT = 10.0f;  // 10 secondes sans changement
     bool hasStoppedEvolving;     // Indique si l'automate a arrêté d'évoluer
     int detectedCycleLength;     // Longueur du cycle détecté (0 = pas de cycle)
+    std::string stopReason;      // Raison de l'arrêt
 
 public:
     /**
@@ -114,24 +120,6 @@ public:
     bool saveToFile(const std::string& filename) const;
 
     /**
-     * @brief Active ou désactive l'enregistrement automatique des générations
-     * @param enabled true pour activer, false pour désactiver
-     */
-    void setAutoSaveGenerations(bool enabled);
-
-    /**
-     * @brief Vérifie si l'enregistrement automatique est activé
-     * @return true si activé, false sinon
-     */
-    bool getAutoSaveGenerations() const;
-
-    /**
-     * @brief Définit le répertoire pour sauvegarder les générations
-     * @param directory Chemin du répertoire
-     */
-    void setSaveDirectory(const std::string& directory);
-
-    /**
      * @brief Obtient le numéro de génération actuel
      * @return Numéro de génération
      */
@@ -167,7 +155,7 @@ public:
     bool canGoBackward() const;
 
     /**
-     * @brief Obtient la position dans l'historique (0 = génération actuelle, 1-5 = générations précédentes)
+     * @brief Obtient la position dans l'historique
      * @return Position dans l'historique
      */
     int getHistoryPosition() const;
@@ -191,9 +179,15 @@ public:
 
     /**
      * @brief Obtient la longueur du cycle détecté
-     * @return Longueur du cycle (0 si aucun cycle, 1 si stable, >1 si oscillation)
+     * @return Longueur du cycle (0 si aucun cycle)
      */
     int getDetectedCycleLength() const;
+
+    /**
+     * @brief Obtient la raison de l'arrêt de l'automate
+     * @return Chaîne décrivant la raison
+     */
+    std::string getStopReason() const;
 
     /**
      * @brief Définit l'intervalle de mise à jour entre les générations
@@ -207,8 +201,49 @@ public:
      */
     float getUpdateInterval() const;
 
+    // ============================================================
+    // Méthodes pour le pattern MVC (Renderer)
+    // ============================================================
+
     /**
-     * @brief Exécute le mode console : génère n itérations et sauvegarde dans des fichiers
+     * @brief Définit le renderer (vue)
+     * @param newRenderer Pointeur partagé vers le renderer
+     */
+    void setRenderer(std::shared_ptr<IRenderer> newRenderer);
+
+    /**
+     * @brief Obtient le renderer actuel
+     * @return Pointeur partagé vers le renderer
+     */
+    std::shared_ptr<IRenderer> getRenderer() const;
+
+    /**
+     * @brief Effectue le rendu de la grille via le renderer
+     */
+    void render();
+
+    // ============================================================
+    // Méthodes pour les règles (Strategy pattern)
+    // ============================================================
+
+    /**
+     * @brief Définit la règle d'évolution
+     * @param newRule Pointeur unique vers la nouvelle règle
+     */
+    void setRule(std::unique_ptr<Rule> newRule);
+
+    /**
+     * @brief Obtient la règle actuelle
+     * @return Référence constante vers la règle
+     */
+    const Rule& getRule() const;
+
+    // ============================================================
+    // Modes d'exécution
+    // ============================================================
+
+    /**
+     * @brief Exécute le mode console
      * @param inputFilename Fichier d'entrée
      * @param numIterations Nombre d'itérations à générer
      * @return true si succès, false sinon
@@ -216,13 +251,25 @@ public:
     bool runConsoleMode(const std::string& inputFilename, int numIterations);
 
     /**
-     * @brief Test unitaire : vérifie si la grille correspond à une grille attendue après n itérations
+     * @brief Test unitaire : vérifie si la grille correspond à une grille attendue
      * @param expectedGridFilename Fichier contenant la grille attendue
      * @param numIterations Nombre d'itérations à effectuer avant comparaison
      * @return true si la grille correspond, false sinon
      */
     bool runUnitTest(const std::string& expectedGridFilename, int numIterations);
+
+    /**
+     * @brief Test unitaire avec grille initiale spécifiée
+     * @param inputFilename Fichier d'entrée avec la grille initiale
+     * @param expectedFilename Fichier contenant la grille attendue
+     * @param numIterations Nombre d'itérations
+     * @return true si la grille correspond après les itérations
+     */
+    bool runUnitTestWithInput(
+        const std::string& inputFilename,
+        const std::string& expectedFilename,
+        int numIterations
+    );
 };
 
 #endif // GAMEOFLIFE_HPP
-

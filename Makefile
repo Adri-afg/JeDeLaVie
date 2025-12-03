@@ -1,8 +1,9 @@
-# Makefile pour le Jeu de la Vie (Version Française)
-# Ce Makefile compile la version avec les noms en français
+# ============================================================
+# Makefile pour le Jeu de la Vie - Version POO
+# ============================================================
 
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2 -pthread
+CXXFLAGS = -std=c++14 -Wall -Wextra -O2 -pthread
 LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system -pthread
 
 # Répertoires
@@ -10,57 +11,112 @@ SRC_DIR = .
 OBJ_DIR = obj
 BIN_DIR = bin
 
-# VERSION ANGLAISE (originale)
-SOURCES_EN = Cell.cpp Grid.cpp GameOfLife.cpp main.cpp
-OBJECTS_EN = $(SOURCES_EN:%.cpp=$(OBJ_DIR)/%.o)
+# Fichiers sources
+SOURCES = \
+	CellState.cpp \
+	Rule.cpp \
+	Cell.cpp \
+	Grid.cpp \
+	Renderer.cpp \
+	SFMLRenderer.cpp \
+	FileHandler.cpp \
+	GameOfLife.cpp \
+	Application.cpp \
+	main.cpp
 
-# VERSION FRANÇAISE
-SOURCES_FR = Cellule.cpp Grille.cpp JeuDeLaVie.cpp main_fr.cpp
-OBJECTS_FR = $(SOURCES_FR:%.cpp=$(OBJ_DIR)/%.o)
+# Fichiers objets
+OBJECTS = $(SOURCES:%.cpp=$(OBJ_DIR)/%.o)
 
-# Cible par défaut = version anglaise
+# Cible principale
 TARGET = $(BIN_DIR)/game_of_life
-TARGET_FR = $(BIN_DIR)/jeu_de_la_vie
 
-# Règle par défaut (version anglaise)
+# ============================================================
+# Règles de compilation
+# ============================================================
+
 all: $(TARGET)
 
-# Version française
-francais: $(TARGET_FR)
+$(TARGET): $(OBJECTS) | $(BIN_DIR)
+	@echo "=== Liaison de l'exécutable ==="
+	$(CXX) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
+	@echo "=== Compilation terminée : $(TARGET) ==="
 
-# Création de l'exécutable (anglais)
-$(TARGET): $(OBJECTS_EN) | $(BIN_DIR)
-	$(CXX) $(OBJECTS_EN) -o $(TARGET) $(LDFLAGS)
-
-# Création de l'exécutable (français)
-$(TARGET_FR): $(OBJECTS_FR) | $(BIN_DIR)
-	$(CXX) $(OBJECTS_FR) -o $(TARGET_FR) $(LDFLAGS)
-
-# Compilation des fichiers objets
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
+	@echo "Compilation de $<..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Création des répertoires
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
-# Nettoyage
+# ============================================================
+# Dépendances
+# ============================================================
+
+$(OBJ_DIR)/CellState.o: CellState.cpp CellState.hpp
+$(OBJ_DIR)/Rule.o: Rule.cpp Rule.hpp CellState.hpp
+$(OBJ_DIR)/Cell.o: Cell.cpp Cell.hpp CellState.hpp
+$(OBJ_DIR)/Grid.o: Grid.cpp Grid.hpp Cell.hpp Rule.hpp FileHandler.hpp
+$(OBJ_DIR)/Renderer.o: Renderer.cpp Renderer.hpp Grid.hpp
+$(OBJ_DIR)/SFMLRenderer.o: SFMLRenderer.cpp SFMLRenderer.hpp Renderer.hpp Grid.hpp Cell.hpp
+$(OBJ_DIR)/FileHandler.o: FileHandler.cpp FileHandler.hpp Grid.hpp
+$(OBJ_DIR)/GameOfLife.o: GameOfLife.cpp GameOfLife.hpp Grid.hpp Renderer.hpp Rule.hpp FileHandler.hpp
+$(OBJ_DIR)/Application.o: Application.cpp Application.hpp GameOfLife.hpp SFMLRenderer.hpp Rule.hpp
+$(OBJ_DIR)/main.o: main.cpp Application.hpp GameOfLife.hpp UnitTests.hpp
+
+# ============================================================
+# Commandes utilitaires
+# ============================================================
+
 clean:
+	@echo "=== Nettoyage ==="
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
-# Réinstallation complète
 rebuild: clean all
 
-# Exécution (anglais)
 run: $(TARGET)
 	./$(TARGET)
 
-# Exécution (français)
-run_fr: $(TARGET_FR)
-	./$(TARGET_FR)
+run-file: $(TARGET)
+	@if [ -z "$(FILE)" ]; then echo "Usage: make run-file FILE=exemple.txt"; else ./$(TARGET) $(FILE); fi
 
-.PHONY: all francais clean rebuild run run_fr
+console: $(TARGET)
+	@if [ -z "$(FILE)" ] || [ -z "$(N)" ]; then echo "Usage: make console FILE=exemple.txt N=100"; else ./$(TARGET) --console $(FILE) $(N); fi
 
+test: $(TARGET)
+	@if [ -z "$(INIT)" ] || [ -z "$(EXPECTED)" ] || [ -z "$(N)" ]; then echo "Usage: make test INIT=init.txt EXPECTED=expected.txt N=10"; else ./$(TARGET) --test $(INIT) $(EXPECTED) $(N); fi
+
+# Tests unitaires complets
+unit: $(TARGET)
+	@echo "=== Exécution des tests unitaires ==="
+	./$(TARGET) --unit
+
+help: $(TARGET)
+	./$(TARGET) --help
+
+debug: CXXFLAGS += -g -DDEBUG
+debug: rebuild
+
+release: CXXFLAGS += -O3 -DNDEBUG
+release: rebuild
+
+info:
+	@echo "============================================"
+	@echo "  Jeu de la Vie - Version POO"
+	@echo "============================================"
+	@echo "  Fichiers sources :"
+	@echo "    - CellState.cpp    (hiérarchie d'états)"
+	@echo "    - Rule.cpp         (hiérarchie de règles)"
+	@echo "    - Cell.cpp         (cellule avec état)"
+	@echo "    - Grid.cpp         (grille avec règle)"
+	@echo "    - Renderer.cpp     (interface rendu)"
+	@echo "    - SFMLRenderer.cpp (rendu SFML)"
+	@echo "    - FileHandler.cpp  (gestion fichiers)"
+	@echo "    - GameOfLife.cpp   (contrôleur jeu)"
+	@echo "    - Application.cpp  (interface graphique)"
+	@echo "    - main.cpp         (modes d'exécution)"
+	@echo "============================================"
+
+.PHONY: all clean rebuild run run-file console test unit help debug release info
