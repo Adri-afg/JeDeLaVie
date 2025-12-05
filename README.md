@@ -20,7 +20,7 @@
 |-------------|---------|
 | **Projet** | Jeu de la Vie (Game of Life) |
 | **Version** | 2.0 |
-| **Auteurs** | **Hosseini SALET** et **Mohamed ELMORABITI** |
+| **Auteurs** | **HOSSEINI Saleh** et **Mohamed ELMORABITI** |
 | **Formation** | CESI A2 - Programmation Orientee Objet |
 | **Langage** | C++ avec SFML |
 | **Date** | 2025 |
